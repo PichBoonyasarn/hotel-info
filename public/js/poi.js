@@ -24,6 +24,23 @@ async function fetchHotelSpots(lat, lng, opts) {
   } catch (err) { console.log('fetchHotelSpots failed:', err.message); return { error: err.message }; }
 }
 
+// Used by resolveHotel() in index.html only when #hotelAddress is blank.
+// Returns null (not throw) on any failure/no-match so resolveHotel() can
+// produce its own Japanese error message with full context (telling the
+// user to type the address manually) rather than this generic wrapper's
+// console-only failure message — same console.log-on-failure pattern as
+// fetchWorksiteHospitals/fetchHotelSpots above, but returns null instead of
+// [] /{error} since the caller needs a clear "nothing usable" signal.
+async function fetchHotelByName(name, lat, lng) {
+  try {
+    const params = `name=${encodeURIComponent(name)}&lat=${lat}&lng=${lng}`;
+    const res = await fetch(`/api/poi/hotel-lookup?${params}`, { cache: 'no-store' });
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || `ホテル検索エラー: ${res.status}`);
+    return data;
+  } catch (err) { console.log('fetchHotelByName failed:', err.message); return null; }
+}
+
 const HOTEL_SPOT_CATEGORIES = [
   { key: 'convenienceStores', label: 'コンビニ' },
   { key: 'supermarkets', label: 'スーパー' },

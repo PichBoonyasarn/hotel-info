@@ -23,6 +23,9 @@ usage, Routes API leg pattern).
 - 計画書 (.docx) generation (`routes/documentGen.js`) — ported unchanged;
   frontend payload built from a single hotel state object instead of a
   search-result array.
+- Hotel address/phone auto-lookup by name (`routes/poi.js` `/hotel-lookup`,
+  `lib/googlePlaces.js` `searchText`) when `#hotelAddress` is left blank,
+  biased to 現場.
 
 ## Explicitly out of scope (carried over by reference from hotel-finder, not reused)
 

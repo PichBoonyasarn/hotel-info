@@ -204,8 +204,8 @@
     </div>
     <div class="grid full" style="margin-top: 16px;">
       <div>
-        <label for="hotelAddress">住所</label>
-        <input id="hotelAddress" type="text" placeholder="例: 京都府京都市下京区...">
+        <label for="hotelAddress">住所（任意 — 空欄の場合はホテル名から自動検索）</label>
+        <input id="hotelAddress" type="text" placeholder="例: 京都府京都市下京区...（空欄ならホテル名から自動検索）">
       </div>
     </div>
     <div class="grid" style="margin-top: 16px;">
@@ -448,20 +448,41 @@ async function resolveWorksite() {
   worksiteLat = loc.lat; worksiteLng = loc.lng;
 }
 
+// Precedence: (a) manual lat/lng override always wins, unchanged; (b) an
+// address typed in #hotelAddress is geocoded as before, unchanged; (c) if
+// both are blank, fall back to a server-side Places Text Search by hotel
+// name, biased toward the already-resolved worksite (resolveWorksite() runs
+// before this — see fetchInfo() — so worksiteLat/worksiteLng are always set
+// here). Phone auto-fill only ever fills an EMPTY #hotelPhone — never
+// overwrites a value the user already typed, since the user's own entry is
+// more trustworthy than a Places-API guess at disambiguating chains.
 async function resolveHotel() {
+  const name = document.getElementById('hotelName').value.trim();
+  if (!name) throw new Error('ホテル名を入力してください。');
+
   const manualLat = parseFloat(document.getElementById('hotelLat').value);
   const manualLng = parseFloat(document.getElementById('hotelLng').value);
+  const addr = document.getElementById('hotelAddress').value.trim();
+
   if (!isNaN(manualLat) && !isNaN(manualLng)) {
     hotelLat = manualLat; hotelLng = manualLng;
-  } else {
-    const addr = document.getElementById('hotelAddress').value.trim();
-    if (!addr) throw new Error('ホテルの住所または緯度・経度を入力してください。');
+    return;
+  }
+
+  if (addr) {
     const loc = await geocodeAddress(addr, 'ホテルの住所が見つかりませんでした。');
     hotelLat = loc.lat; hotelLng = loc.lng;
+    return;
   }
-  if (!document.getElementById('hotelName').value.trim()) {
-    throw new Error('ホテル名を入力してください。');
+
+  const found = await fetchHotelByName(name, worksiteLat, worksiteLng);
+  if (!found) {
+    throw new Error('ホテル名から住所を自動検索できませんでした。住所を直接入力してください。');
   }
+  document.getElementById('hotelAddress').value = found.address;
+  hotelLat = found.lat; hotelLng = found.lng;
+  const phoneField = document.getElementById('hotelPhone');
+  if (!phoneField.value.trim() && found.phone) phoneField.value = found.phone;
 }
 
 async function fetchInfo() {

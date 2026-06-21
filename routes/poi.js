@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { searchNearby, shapePlace } = require('../lib/googlePlaces');
+const { searchNearby, shapePlace, searchText } = require('../lib/googlePlaces');
 
 const GOOGLE_MAPS_KEY = process.env.GOOGLE_MAPS_KEY || '';
 
@@ -143,6 +143,59 @@ router.get('/hotel-spots', async (req, res) => {
       travelSpots:        travelResults.map(p => shapePlace(p, lat, lng)),
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Google's New Places API type table uses 'lodging' for hotels/inns/ryokan
+// (no separate 'hotel' type). Text Search can return a confident non-lodging
+// match for an ambiguous query (e.g. a name that's also a restaurant or
+// building) — same false-positive risk the hospital filter above guards
+// against, just with a much shorter list. No name-keyword fallback is
+// applied here (unlike hospitals): a hotel's *name* is exactly the
+// unreliable input driving this search in the first place, so there's
+// nothing more trustworthy to fall back to — types is the only signal we
+// have, and a miss here should surface as "not found", not a silent guess.
+function isLikelyLodging(place) {
+  return (place.types || []).includes('lodging');
+}
+
+// Called once per "情報を取得" session, only when the user left #hotelAddress
+// blank (see resolveHotel() in index.html) — not a per-row search like
+// /hotel-spots, so the Contact Data SKU surcharge documented in
+// lib/googlePlaces.js's searchText() is an acceptable, low-frequency cost.
+// `lat`/`lng` bias toward 現場 (worksite) to disambiguate hotel chains with
+// many branches nationwide — worksite coords are always resolved before this
+// is called (resolveWorksite() runs before resolveHotel() in fetchInfo()).
+router.get('/hotel-lookup', async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  if (!GOOGLE_MAPS_KEY) return res.status(500).json({ error: 'GOOGLE_MAPS_KEY is not configured' });
+
+  const name = (req.query.name || '').trim();
+  if (!name) return res.status(400).json({ error: 'name is required' });
+
+  const lat = parseFloat(req.query.lat);
+  const lng = parseFloat(req.query.lng);
+  const hasBias = !isNaN(lat) && !isNaN(lng);
+
+  try {
+    // 50km radius matches /hospitals' tier-2 fallback radius: wide enough to
+    // catch a real branch in the same metro area, not so wide it stops
+    // meaningfully disambiguating chains.
+    const place = await searchText(name, hasBias ? { lat, lng, radius: 50000 } : {}, GOOGLE_MAPS_KEY);
+
+    if (!place || !isLikelyLodging(place)) {
+      return res.json({ error: 'ホテルが見つかりませんでした。住所を直接入力してください。' });
+    }
+
+    res.json({
+      name: place.displayName?.text || name,
+      address: place.formattedAddress || '',
+      phone: place.nationalPhoneNumber || '',
+      lat: place.location?.latitude ?? null,
+      lng: place.location?.longitude ?? null,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 const PHOTO_NAME_PATTERN = /^places\/[^/]+\/photos\/[^/]+$/;
