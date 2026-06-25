@@ -135,10 +135,12 @@ function renderHospitalPanel(hospitals, containerId) {
   container.innerHTML = `
     <div class="hospital-count">最も近い病院 ${hospitals.length} 件</div>
     <ul class="hospital-list">
-      ${top.map(h => `
+      ${top.map((h, i) => `
         <li>
+          <span class="hospital-num">${i + 1}</span>
           <strong>${h.name}</strong>
           <span>${h.distance != null ? h.distance + ' km' : ''}</span>
+          ${h.phone ? `<span>${h.phone}</span>` : ''}
           <a href="${h.mapLink}" target="_blank">地図 ↗</a>
         </li>`).join('')}
     </ul>`;
