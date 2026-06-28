@@ -140,6 +140,27 @@
   .hotel-info-address { font-size: 13px; color: #9a9080; line-height: 1.6; margin-top: 10px; }
 
   footer { margin-top: 40px; font-size: 11px; color: #b3aa9b; text-align: center; }
+
+  /* suppress Google Maps' cooperative-mode "Use Ctrl+scroll to zoom" overlay */
+  .gm-style-moc { display: none !important; }
+
+  /* Responsive: collapse all layouts to single column on tablet/mobile */
+  @media (max-width: 900px) {
+    .top-layout, .routes-layout, .bottom-layout, .hospital-layout {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  /* Mobile */
+  @media (max-width: 600px) {
+    input, select { font-size: 16px !important; }
+    #map { min-height: 250px; }
+    .spot-tabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 6px; }
+    .spot-tab { flex-shrink: 0; }
+    button { min-height: 44px; }
+    .btn-primary { padding: 14px 22px; }
+    h1 { font-size: 28px; }
+  }
 </style>
 </head>
 <body>
@@ -299,6 +320,7 @@ let companyLng = null;
 
 let worksiteLat = null;
 let worksiteLng = null;
+let worksitePlaceId = null;
 
 let hotelLat = null;
 let hotelLng = null;
@@ -352,7 +374,7 @@ async function geocodeAddress(address, notFoundMessage) {
     geocoder.geocode({ address }, (results, status) => {
       if (status === 'OK' && results[0]) {
         const loc = results[0].geometry.location;
-        resolve({ lat: loc.lat(), lng: loc.lng() });
+        resolve({ lat: loc.lat(), lng: loc.lng(), placeId: results[0].place_id ?? null });
       } else {
         reject(new Error(notFoundMessage || '住所が見つかりませんでした。'));
       }
@@ -434,12 +456,14 @@ async function resolveWorksite() {
   const manualLng = parseFloat(document.getElementById('worksiteLng').value);
   if (!isNaN(manualLat) && !isNaN(manualLng)) {
     worksiteLat = manualLat; worksiteLng = manualLng;
+    worksitePlaceId = null; // raw coordinates — no place to fetch a photo for
     return;
   }
   const addr = document.getElementById('worksiteAddress').value.trim();
   if (!addr) throw new Error('現場の住所または緯度・経度を入力してください。');
   const loc = await geocodeAddress(addr, '現場の住所が見つかりませんでした。');
   worksiteLat = loc.lat; worksiteLng = loc.lng;
+  worksitePlaceId = loc.placeId ?? null; // set when geocoder resolved a named place
 }
 
 async function resolveHotel() {
