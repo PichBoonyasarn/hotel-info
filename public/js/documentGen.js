@@ -1,4 +1,4 @@
-// Reuses worksiteLat/worksiteLng/hotelLat/hotelLng/lastHospitals/
+// Reuses worksiteLat/worksiteLng/worksitePlaceId/hotelLat/hotelLng/lastHospitals/
 // lastStartToWorksiteLeg/cachedRouteToHotel/cachedHotelSpots/companyLat/
 // companyLng/ensureCompanyLocation/fetchRouteLeg/fetchHotelSpots/setStatus
 // — all globals defined in the inline <script> in index.html, same pattern
@@ -6,7 +6,8 @@
 
 function shapeHospitalsForDoc(hospitals) {
   return (hospitals || []).map(h => ({
-    name: h.name, address: h.address, distance: h.distance, lat: h.lat, lng: h.lng,
+    name: h.name, address: h.address, distance: h.distance,
+    lat: h.lat, lng: h.lng, phone: h.phone ?? null,
   }));
 }
 
@@ -14,7 +15,13 @@ function shapeHotelSpotsForDoc(spots) {
   if (!spots || spots.error) return {};
   const shaped = {};
   for (const key of ['convenienceStores', 'supermarkets', 'restaurants', 'izakaya', 'bars', 'travelSpots']) {
-    shaped[key] = (spots[key] || []).map(s => ({ name: s.name, distance: s.distance, lat: s.lat, lng: s.lng }));
+    shaped[key] = (spots[key] || []).map(s => ({
+      name: s.name, distance: s.distance, lat: s.lat, lng: s.lng,
+      rating: s.rating ?? null, userRatingCount: s.userRatingCount ?? null,
+      editorialSummary: s.editorialSummary ?? null,
+      photoRef: s.photoRef ?? null,
+      iconMaskBaseUri: s.iconMaskBaseUri ?? null,
+    }));
   }
   return shaped;
 }
@@ -62,6 +69,21 @@ async function downloadBlobResponse(res, fallbackName) {
   URL.revokeObjectURL(url);
 }
 
+// Fetches a real Places photo of 現場 when it was resolved from a typed
+// name/address (worksitePlaceId set by index.html's geocoder). Returns null
+// when worksitePlaceId is absent (raw lat/lng input) — the backend's
+// fetchWorksitePhoto() will fall back to Street View in that case.
+async function fetchWorksitePhotoUrl() {
+  if (!worksitePlaceId) return null;
+  return new Promise(resolve => {
+    const svc = new google.maps.places.PlacesService(document.createElement('div'));
+    svc.getDetails({ placeId: worksitePlaceId, fields: ['photos'] }, (place, status) => {
+      if (status !== 'OK' || !place.photos?.length) return resolve(null);
+      resolve(place.photos[0].getUrl({ maxWidth: 1200 }));
+    });
+  });
+}
+
 // Generates and downloads a .docx for the single manually-entered hotel.
 // Reuses already-fetched route-leg/hotel-spots data (cachedRouteToHotel/
 // cachedHotelSpots, populated by 情報を取得's loadRouteToHotel/
@@ -97,8 +119,10 @@ async function generateDocument() {
     const hotelPrice = document.getElementById('hotelPrice').value.trim();
     const worksiteAddressInput = document.getElementById('worksiteAddress').value.trim();
 
+    const worksitePhotoUrl = await fetchWorksitePhotoUrl();
+
     const payload = {
-      worksite: { lat: worksite.lat, lng: worksite.lng, address: worksiteAddressInput || `${worksite.lat}, ${worksite.lng}` },
+      worksite: { lat: worksite.lat, lng: worksite.lng, address: worksiteAddressInput || `${worksite.lat}, ${worksite.lng}`, photoUrl: worksitePhotoUrl },
       company: { lat: company.lat, lng: company.lng },
       hotel: {
         name: hotelName, address: hotelAddress, phone: hotelPhone,

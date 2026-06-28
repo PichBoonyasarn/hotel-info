@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { searchNearby, shapePlace, searchText } = require('../lib/googlePlaces');
+const { searchNearby, shapePlace, searchText, RATING_SUMMARY_FIELDS, PHONE_FIELD, ICON_FIELD } = require('../lib/googlePlaces');
 
 const GOOGLE_MAPS_KEY = process.env.GOOGLE_MAPS_KEY || '';
 
@@ -72,8 +72,8 @@ function parseLatLng(req, res) {
 // survive Google's result cap before that sort happens.
 async function fetchQualifyingHospitals(lat, lng, radius) {
   const [generalResults, hospitalResults] = await Promise.all([
-    searchNearby(lat, lng, radius, { includedTypes: ['general_hospital'] }, GOOGLE_MAPS_KEY),
-    searchNearby(lat, lng, radius, { includedTypes: ['hospital'] }, GOOGLE_MAPS_KEY),
+    searchNearby(lat, lng, radius, { includedTypes: ['general_hospital'], extraFields: PHONE_FIELD }, GOOGLE_MAPS_KEY),
+    searchNearby(lat, lng, radius, { includedTypes: ['hospital'], extraFields: PHONE_FIELD }, GOOGLE_MAPS_KEY),
   ]);
   const byId = new Map();
   for (const p of [...generalResults, ...hospitalResults]) {
@@ -126,13 +126,14 @@ router.get('/hotel-spots', async (req, res) => {
   const barRadius    = Math.min(parseFloat(req.query.barRadius) || 400, 2000);
   const travelRadius = Math.min(parseFloat(req.query.travelRadius) || 2000, 5000);
   try {
+    const spotExtraFields = `${RATING_SUMMARY_FIELDS},${ICON_FIELD}`;
     const [convResults, superResults, restaurantResults, izakayaResults, barResults, travelResults] = await Promise.all([
-      searchNearby(lat, lng, radius, { includedTypes: ['convenience_store'] }, GOOGLE_MAPS_KEY),
-      searchNearby(lat, lng, radius, { includedTypes: ['supermarket'] }, GOOGLE_MAPS_KEY),
-      searchNearby(lat, lng, diningRadius, { includedTypes: ['restaurant'], excludedTypes: ['japanese_izakaya_restaurant'] }, GOOGLE_MAPS_KEY),
-      searchNearby(lat, lng, diningRadius, { includedTypes: ['japanese_izakaya_restaurant'] }, GOOGLE_MAPS_KEY),
-      searchNearby(lat, lng, barRadius, { includedTypes: ['bar'] }, GOOGLE_MAPS_KEY),
-      searchNearby(lat, lng, travelRadius, { includedTypes: ['tourist_attraction', 'museum', 'art_gallery'] }, GOOGLE_MAPS_KEY),
+      searchNearby(lat, lng, radius, { includedTypes: ['convenience_store'], extraFields: spotExtraFields }, GOOGLE_MAPS_KEY),
+      searchNearby(lat, lng, radius, { includedTypes: ['grocery_store'], extraFields: spotExtraFields }, GOOGLE_MAPS_KEY),
+      searchNearby(lat, lng, diningRadius, { includedTypes: ['restaurant'], excludedTypes: ['japanese_izakaya_restaurant'], extraFields: spotExtraFields }, GOOGLE_MAPS_KEY),
+      searchNearby(lat, lng, diningRadius, { includedTypes: ['japanese_izakaya_restaurant'], extraFields: spotExtraFields }, GOOGLE_MAPS_KEY),
+      searchNearby(lat, lng, barRadius, { includedTypes: ['bar'], extraFields: spotExtraFields }, GOOGLE_MAPS_KEY),
+      searchNearby(lat, lng, travelRadius, { includedTypes: ['tourist_attraction', 'museum', 'art_gallery'], extraFields: spotExtraFields }, GOOGLE_MAPS_KEY),
     ]);
     res.json({
       convenienceStores: convResults.map(p => shapePlace(p, lat, lng)),
